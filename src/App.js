@@ -7,7 +7,6 @@ import "firebase/compat/auth";
 
 import { useAuthState } from "react-firebase-hooks/auth";
 import { useCollectionData } from "react-firebase-hooks/firestore";
-import { render } from "@testing-library/react";
 
 firebase.initializeApp({
   apiKey: "AIzaSyCSTQVzhFXYWW6ESfCRSdFlAqY2tg6zJAA",
@@ -33,7 +32,9 @@ function App() {
 
   return (
     <div className="App">
-      <header className="App-header"></header>
+      <header className="App-header">
+        <SignOut />
+      </header>
       {/* IF USER IS SIGNED IN : show chatroom. USER NOT SIGNED IN: show sign in section */}
       <section>{user ? <ChatRoom /> : <SignIn />}</section>
     </div>
@@ -55,6 +56,7 @@ function SignIn() {
     </button>
   );
 }
+
 // SIGN OUT COMPONENT
 function SignOut() {
   return (
@@ -64,6 +66,7 @@ function SignOut() {
 
 // CHATROOM COMPONENT
 function ChatRoom() {
+  const dummy = useRef();
   // reference to the messages collection in firestore
   const messagesRef = firestore.collection("messages");
   // query to get the messages from firestore
@@ -71,21 +74,72 @@ function ChatRoom() {
   // make this query and listen to any updates in real time with the useCollectionData() hook
   //  returns an array of ojects; each object is the chat message in the data base
   const [messages] = useCollectionData(query, { idField: "id" });
+  // stateful variable to store the message
+  const [formValue, setFormValue] = useState("");
+
+  const sendMessage = async (e) => {
+    // prevent the default behavior of the form(when the user presses enter, the page refreshes)
+    e.preventDefault();
+
+    // get the current user
+    const { uid, photoURL } = auth.currentUser;
+
+    // add the message to the database
+    await messagesRef.add({
+      text: formValue,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      uid,
+      photoURL,
+    });
+    // whenever the user sends a message, scroll the newest message into view
+    dummy.current.scrollIntoView({ behavior: "smooth" });
+    // clear the form
+    setFormValue("");
+  };
+
   return (
     <>
-      {console.log("messages")}
-      <div>
-        <p>hi</p>
-        {/* map through the messages array and render a ChatMessage component for each message */}
-        {messages &&
-          messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
-      </div>
+      <main>
+        {messages && messages.length > 0 ? (
+          messages.map((message) => (
+            <ChatMessage key={message.id} message={message} />
+          ))
+        ) : (
+          <p>No messages yet</p>
+        )}
+        {/* used to scroll the newest message into view */}
+        <div ref={dummy}></div>
+      </main>
+
+      <form onSubmit={sendMessage}>
+        {/* whenever the user types into the form, it triggers to the change event*/}
+        <input
+          value={formValue}
+          onChange={(e) => setFormValue(e.target.value)}
+        />
+        <button type="submit">Send</button>
+      </form>
     </>
   );
 }
+
 function ChatMessage(props) {
-  const { text, uid } = props.message;
-  return <p>TEST{text}</p>;
+  const { text, uid, photoURL } = props.message;
+
+  // we need to distinguish between the user's messages and other messages
+  // if the user's uid is the same as the message's uid, then the message is from the user
+  const messageClass = uid === auth.currentUser.uid ? "sent" : "received";
+  return (
+    <>
+      {/* className is either "message sent" or "message received" to distinguish
+      between the user's messages and other messages */}
+      <div className={`message ${messageClass}`}>
+        <img src={photoURL} />
+        <p>{text}</p>
+      </div>
+      {/* FORM- a feature for users to type messages. BUTTON to submit message */}
+    </>
+  );
 }
 
 export default App;
